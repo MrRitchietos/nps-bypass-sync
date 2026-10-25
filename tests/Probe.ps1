@@ -24,15 +24,34 @@ $patterns = [ordered]@{
     V10_ignore   = "(?i)^user17$"
 }
 $inputs = "$nb\user17", "$($nb.ToLower())\user17", "$($nb.ToUpper())\user17", "$nb\USER17", "user17", "USER17", "$nb\user1", "$nb\user10", "user1", "first.last1@contoso.com"
-$rows = foreach ($k in $patterns.Keys)
+function Test-Inputs ($k, $list)
 {
-    try { N "set crp name=P conditionid=0x1 conditiondata=`"$($patterns[$k])`" profileid=0x1025 profiledata=0x1" } catch { [pscustomobject]@{ Pattern = $k; Input = 'SET FAILED'; Result = "$_" }; continue }
-    Start-Sleep 2
-    foreach ($i in $inputs)
+    foreach ($i in $list)
     {
         $c = Send-RadiusPap -UserName $i -Password 'wrong' -Server $ip -Secret 'GwSecret!42' -Gateway -TimeoutMs 10000
         [pscustomobject]@{ Pattern = $k; Input = $i; Result = switch ($c) { 3 { 'MATCH' } 2 { 'no' } default { "?$c" } } }
     }
+}
+# 1) Does a change go live without a restart? (set + import, wait up to 90 s)
+N "set crp name=P conditionid=0x1 conditiondata=`"^$nb\\user17$`" profileid=0x1025 profiledata=0x1"
+$timing = foreach ($w in 2, 30, 60) { Start-Sleep ($w - $(if ($w -eq 2) { 0 } elseif ($w -eq 30) { 2 } else { 30 })); Test-Inputs "netsh-after-${w}s" "$nb\user17" }
+Export-NpsConfiguration -Path "$env:TEMP\p.xml"
+$x = [xml](Get-Content "$env:TEMP\p.xml" -Raw)
+$n = $x.SelectSingleNode("//Proxy_Policies/Children/*[@name='P']/Properties/msNPConstraint")
+$n.InnerText = 'MATCH("User-Name=^' + $nb + '\\user18$")'
+$x.Save("$env:TEMP\p2.xml")
+Import-NpsConfiguration -Path "$env:TEMP\p2.xml"
+$timing += foreach ($w in 2, 30) { Start-Sleep $(if ($w -eq 2) { 2 } else { 28 }); Test-Inputs "import-after-${w}s" "$nb\user18" }
+Restart-Service IAS; Start-Sleep 3
+$timing += Test-Inputs 'import-after-restart' "$nb\user18"
+$timing | Format-Table -AutoSize | Out-String -Width 200
+
+# 2) Matching rules, with a service restart after each change
+$rows = foreach ($k in $patterns.Keys)
+{
+    N "set crp name=P conditionid=0x1 conditiondata=`"$($patterns[$k])`" profileid=0x1025 profiledata=0x1"
+    Restart-Service IAS; Start-Sleep 3
+    Test-Inputs $k $inputs
 }
 "COMPUTERNAME=$nb"
 $rows | Format-Table -AutoSize | Out-String -Width 200

@@ -326,7 +326,7 @@ function Get-CandidateUsers
     if ($Ctx.TestUsersFile)
     {
         # Test source: [{ Sam, Upn, DisplayName, NetBios, Groups: [..], Disabled }]
-        $all = @([IO.File]::ReadAllText($Ctx.TestUsersFile) | ConvertFrom-Json)
+        $all = @([IO.File]::ReadAllText($Ctx.TestUsersFile) | ConvertFrom-Json | ForEach-Object { $_ })
         foreach ($g in $Config.BypassGroups)
         {
             foreach ($u in $all | Where-Object { @($_.Groups) -contains $g })

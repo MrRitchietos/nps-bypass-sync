@@ -204,7 +204,6 @@ $people = @(
 ) | ForEach-Object { [ordered]@{ Sam = $_[1]; Upn = "$($_[2])@contoso.com"; DisplayName = $_[0]; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass', 'RDS-Users') } }
 $people[15].Groups = @('MFA-Bypass')
 $people[16].Disabled = $true
-$late = $people[13..14]
 $people[13].Groups = @(); $people[14].Groups = @()
 Write-Config @{}
 Write-Users $people

@@ -259,6 +259,7 @@ function Get-Prop
 
 function Get-DomainInfo
 {
+    Add-Type -AssemblyName System.DirectoryServices
     $domainDn = ''
     $configDn = ''
     try
@@ -1437,12 +1438,18 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                                 <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="62"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                        <StackPanel Grid.Column="1" Margin="10,4,0,0">
+                        <Grid Grid.Column="1" Margin="10,4,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MinHeight="40"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MinHeight="40"/>
+                            </Grid.RowDefinitions>
                             <TextBlock Text="User Name condition (new)" Style="{StaticResource Label}"/>
-                            <TextBox Name="TxtPattern" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" Height="64" VerticalContentAlignment="Top" Margin="0,0,0,8"/>
-                            <TextBlock Text="Now in NPS" Style="{StaticResource Label}"/>
-                            <TextBox Name="TxtOldPattern" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" Height="64" VerticalContentAlignment="Top"/>
-                        </StackPanel>
+                            <TextBox Name="TxtPattern" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8"/>
+                            <TextBlock Grid.Row="2" Text="Now in NPS" Style="{StaticResource Label}"/>
+                            <TextBox Name="TxtOldPattern" Grid.Row="3" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
+                        </Grid>
                     </Grid>
                     <Border Grid.Row="4" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="18,12" Margin="0,14,0,0">
                         <Grid>
@@ -1964,10 +1971,6 @@ function Save-WindowImage
     $source = [Windows.PresentationSource]::FromVisual($window)
     $scale = if ($source) { $source.CompositionTarget.TransformToDevice.M11 } else { 1 }
     $content = $window.Content
-    # Render at the normal window size, also on a small CI screen.
-    $content.Measure((New-Object Windows.Size 1220, 800))
-    $content.Arrange((New-Object Windows.Rect 0, 0, 1220, 800))
-    $content.UpdateLayout()
     $rtb = [Windows.Media.Imaging.RenderTargetBitmap]::new([int]($content.ActualWidth * $scale), [int]($content.ActualHeight * $scale), [double](96 * $scale), [double](96 * $scale), [Windows.Media.PixelFormats]::Pbgra32)
     $rtb.Render($content)
     $enc = New-Object Windows.Media.Imaging.PngBitmapEncoder

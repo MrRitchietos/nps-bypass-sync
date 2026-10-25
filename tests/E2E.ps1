@@ -46,7 +46,13 @@ function Get-Crps
     $secret = $x.SelectSingleNode("//Clients/Children/*[@name='gateway']/Properties/Shared_Secret").InnerText
     return [pscustomobject]@{ Crps = @($list | Sort-Object Seq); Secret = $secret }
 }
-function Test-Bypass ([string]$User) { return (Send-RadiusPap -UserName $User -Password 'wrong-password' -Server $ip -Secret 'GwSecret!42' -Gateway) -eq 3 }
+function Test-Bypass ([string]$User)
+{
+    # 3 = Access-Reject from local auth (bypass policy), 2 = Access-Accept from the gateway stand-in (MFA path).
+    $code = Send-RadiusPap -UserName $User -Password 'wrong-password' -Server $ip -Secret 'GwSecret!42' -Gateway -TimeoutMs 10000
+    if ($null -eq $code) { throw "No RADIUS answer for $User" }
+    return $code -eq 3
+}
 function Write-Users ($Users) { $Users | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $usersFile -Encoding UTF8 }
 function Write-Config ($Values)
 {
@@ -56,25 +62,28 @@ function Write-Config ($Values)
     $cfg | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'config.json') -Encoding UTF8
 }
 
+# Users live in the local machine's name, so local auth answers fast (an unknown domain makes NPS wait).
+$nb = $env:COMPUTERNAME
+
 Step 'Install NPS'
 Install-WindowsFeature NPAS -IncludeManagementTools | Out-Null
 $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -First 1).IPAddress
 N "add client name=gateway address=$ip sharedsecret=GwSecret!42 state=enable"
 $allDays = '0 00:00-24:00; 1 00:00-24:00; 2 00:00-24:00; 3 00:00-24:00; 4 00:00-24:00; 5 00:00-24:00; 6 00:00-24:00'
-N "add crp name=Bypass_Admins_Local state=enable processingorder=1 policysource=1 conditionid=0x1 conditiondata=`"^CONTOSO\\admin1$`" profileid=0x1025 profiledata=0x1"
-N "add crp name=Bypass_2 state=enable processingorder=2 policysource=1 conditionid=0x1 conditiondata=`"^CONTOSO\\olduser$|^CONTOSO\\user1$`" profileid=0x1025 profiledata=0x1"
-N "add crp name=Bypass_3 state=enable processingorder=3 policysource=1 conditionid=0x1 conditiondata=`"^CONTOSO\\olduser2$`" profileid=0x1025 profiledata=0x1"
+N "add crp name=Bypass_Admins_Local state=enable processingorder=1 policysource=1 conditionid=0x1 conditiondata=`"^$nb\\admin1$`" profileid=0x1025 profiledata=0x1"
+N "add crp name=Bypass_2 state=enable processingorder=2 policysource=1 conditionid=0x1 conditiondata=`"^$nb\\olduser$|^$nb\\user1$`" profileid=0x1025 profiledata=0x1"
+N "add crp name=Bypass_3 state=enable processingorder=3 policysource=1 conditionid=0x1 conditiondata=`"^$nb\\olduser2$`" profileid=0x1025 profiledata=0x1"
 N "add crp name=`"TS GATEWAY AUTHORIZATION POLICY`" state=enable processingorder=4 policysource=1 conditionid=0x1006 conditiondata=`"$allDays`" profileid=0x1025 profiledata=0x0"
 N "add np name=AllowAll state=enable processingorder=1 policysource=0 conditionid=0x1006 conditiondata=`"$allDays`" profileid=0x100f profiledata=TRUE profileid=0x1009 profiledata=0x1"
 Restart-Service IAS
 Start-Sleep -Seconds 3
-Assert (Test-Bypass 'CONTOSO\olduser') 'before: olduser bypasses (manual policy)'
-Assert (-not (Test-Bypass 'CONTOSO\user5')) 'before: user5 goes to MFA'
+Assert (Test-Bypass "$($nb)\olduser") 'before: olduser bypasses (manual policy)'
+Assert (-not (Test-Bypass "$($nb)\user5")) 'before: user5 goes to MFA'
 
 $users = @()
-$users += 1..40 | ForEach-Object { [ordered]@{ Sam = "user$_"; Upn = "first.last$_@contoso.com"; DisplayName = "Test User $_"; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass', 'RDS-Users') } }
-$users += [ordered]@{ Sam = 'nords'; Upn = 'nords@contoso.com'; DisplayName = 'No RDS'; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass') }
-$users += [ordered]@{ Sam = 'gone'; Upn = 'gone@contoso.com'; DisplayName = 'Disabled'; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass', 'RDS-Users'); Disabled = $true }
+$users += 1..40 | ForEach-Object { [ordered]@{ Sam = "user$_"; Upn = "first.last$_@contoso.com"; DisplayName = "Test User $_"; NetBios = $nb; Groups = @('MFA-Bypass', 'RDS-Users') } }
+$users += [ordered]@{ Sam = 'nords'; Upn = 'nords@contoso.com'; DisplayName = 'No RDS'; NetBios = $nb; Groups = @('MFA-Bypass') }
+$users += [ordered]@{ Sam = 'gone'; Upn = 'gone@contoso.com'; DisplayName = 'Disabled'; NetBios = $nb; Groups = @('MFA-Bypass', 'RDS-Users'); Disabled = $true }
 Write-Users $users
 Write-Config @{}
 
@@ -90,7 +99,7 @@ $managed = @($after.Crps | Where-Object { $_.Name -match '^Bypass_\d+$' })
 Write-Host ($after.Crps | Format-Table Seq, Name, Enabled, @{ n = 'Len'; e = { $_.Pattern.Length } } | Out-String)
 Assert ($managed.Count -ge 3) "$($managed.Count) managed policies"
 Assert (-not @($managed | Where-Object { $_.Pattern.Length -gt 250 }).Count) 'all patterns at most 250 characters'
-Assert ($after.Crps[0].Name -eq 'Bypass_Admins_Local' -and $after.Crps[0].Pattern -eq '^CONTOSO\\admin1$') 'Bypass_Admins_Local untouched and first'
+Assert ($after.Crps[0].Name -eq 'Bypass_Admins_Local' -and $after.Crps[0].Pattern -eq "^$nb\\admin1$") 'Bypass_Admins_Local untouched and first'
 Assert ((@($after.Crps | ForEach-Object Name) -join ',') -eq ((@('Bypass_Admins_Local') + @($managed | ForEach-Object Name) + @('TS GATEWAY AUTHORIZATION POLICY', 'Use Windows authentication for all users')) -join ',')) 'order: admins, bypass block, gateway, default'
 Assert ((@($managed | ForEach-Object Name) -join ',') -eq ((2..($managed.Count + 1) | ForEach-Object { "Bypass_$_" }) -join ',')) 'names Bypass_2..N in a row'
 Assert ($after.Secret -eq 'GwSecret!42') 'RADIUS client secret kept'
@@ -100,8 +109,8 @@ $acl = (Get-Acl $data).Access | ForEach-Object { $_.IdentityReference.Translate(
 Assert ((($acl) -join ',') -eq 'S-1-5-18,S-1-5-32-544') "data folder only SYSTEM + Administrators ($($acl -join ','))"
 
 Step 'RADIUS: who skips MFA'
-foreach ($n in 'CONTOSO\user1', 'contoso\USER17', 'user23', 'first.last40@contoso.com', 'FIRST.LAST2@CONTOSO.COM', 'CONTOSO\admin1') { Assert (Test-Bypass $n) "bypass: $n" }
-foreach ($n in 'CONTOSO\olduser', 'CONTOSO\olduser2', 'CONTOSO\user41', 'CONTOSO\user1x', 'xuser1', 'OTHER\user1', 'first.last1@contoso.comx', 'user1@contoso.com', 'CONTOSO\nords', 'CONTOSO\gone', 'CONTOSO\first.last1') { Assert (-not (Test-Bypass $n)) "MFA: $n" }
+foreach ($n in "$($nb)\user1", "$($nb.ToLower())\USER17", 'user23', 'first.last40@contoso.com', 'FIRST.LAST2@CONTOSO.COM', "$($nb)\admin1") { Assert (Test-Bypass $n) "bypass: $n" }
+foreach ($n in "$($nb)\olduser", "$($nb)\olduser2", "$($nb)\user41", "$($nb)\user1x", 'xuser1', 'OTHER\user1', 'first.last1@contoso.comx', 'user1@contoso.com', "$($nb)\nords", "$($nb)\gone", "$($nb)\first.last1") { Assert (-not (Test-Bypass $n)) "MFA: $n" }
 
 Step 'Second sync changes nothing'
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
@@ -113,8 +122,8 @@ Write-Users $users
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
 $small = @((Get-Crps).Crps | Where-Object { $_.Name -match '^Bypass_\d+$' })
 Assert ($small.Count -eq 1 -and $small[0].Name -eq 'Bypass_2') 'shrunk to Bypass_2 only'
-Assert (Test-Bypass 'CONTOSO\user36') 'bypass: user36'
-Assert (-not (Test-Bypass 'CONTOSO\user1')) 'MFA: removed user1'
+Assert (Test-Bypass "$($nb)\user36") 'bypass: user36'
+Assert (-not (Test-Bypass "$($nb)\user1")) 'MFA: removed user1'
 $state = Get-Content (Join-Path $data 'state.json') -Raw | ConvertFrom-Json
 Assert (@($state.Users).Count -eq 5) 'state has 5 users'
 
@@ -134,15 +143,15 @@ Write-Users $users
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
 $empty = @((Get-Crps).Crps | Where-Object { $_.Name -match '^Bypass_\d+$' })
 Assert ($empty.Count -eq 1 -and -not $empty[0].Enabled) 'one disabled placeholder policy'
-Assert (-not (Test-Bypass 'CONTOSO\user36')) 'MFA: user36'
-Assert (Test-Bypass 'CONTOSO\admin1') 'bypass: admin1 (own policy)'
+Assert (-not (Test-Bypass "$($nb)\user36")) 'MFA: user36'
+Assert (Test-Bypass "$($nb)\admin1") 'bypass: admin1 (own policy)'
 
 Step 'Back to 40 users, different name formats'
 foreach ($u in $users) { $u.Groups = @('MFA-Bypass', 'RDS-Users') }
 Write-Users $users
 Write-Config @{ MatchSam = $false; MatchUpn = $false }
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
-Assert (Test-Bypass 'CONTOSO\user9') 'bypass: CONTOSO\user9'
+Assert (Test-Bypass "$($nb)\user9") 'bypass: DOMAIN\user9'
 Assert (-not (Test-Bypass 'user9')) 'MFA: user9 without domain'
 Assert (-not (Test-Bypass 'first.last9@contoso.com')) 'MFA: UPN when UPN is off'
 Write-Config @{}
@@ -171,7 +180,7 @@ Assert (-not (Test-Path "$env:ProgramFiles\NPS Bypass Sync\NpsBypassSync.exe")) 
 Step 'Window'
 Write-Config @{ BypassGroups = @('MFA-Bypass'); RequireGroups = @('RDS-Users') }
 foreach ($u in $users[0..2]) { $u.Groups = @('RDS-Users') }
-$users += [ordered]@{ Sam = 'newbie'; Upn = 'new.bie@contoso.com'; DisplayName = 'New Person'; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass', 'RDS-Users') }
+$users += [ordered]@{ Sam = 'newbie'; Upn = 'new.bie@contoso.com'; DisplayName = 'New Person'; NetBios = $nb; Groups = @('MFA-Bypass', 'RDS-Users') }
 Write-Users $users
 [void](Invoke-Tool '-Screenshot', (Join-Path $shots 'main'), '-TestUsersFile', $usersFile)
 Assert (Test-Path (Join-Path $shots 'main-ready.png')) 'screenshot saved'

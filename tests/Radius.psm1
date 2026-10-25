@@ -26,7 +26,8 @@ function Send-RadiusPap
         [string]$Secret = 'TestSecret123',
         [string]$Server = '127.0.0.1',
         [int]$Port = 1812,
-        [int]$TimeoutMs = 4000
+        [int]$TimeoutMs = 4000,
+        [switch]$Gateway
     )
     $enc = [Text.Encoding]::UTF8
     $secretBytes = $enc.GetBytes($Secret)
@@ -50,8 +51,13 @@ function Send-RadiusPap
     $attrs = New-Object Collections.Generic.List[byte]
     $attrs.AddRange([byte[]](New-Attribute 1 $enc.GetBytes($UserName)))
     $attrs.AddRange([byte[]](New-Attribute 2 $hidden))
-    $attrs.AddRange([byte[]](New-Attribute 4 ([byte[]](127, 0, 0, 1))))
+    $attrs.AddRange([byte[]](New-Attribute 4 ([Net.IPAddress]::Parse($Server).GetAddressBytes())))
     $attrs.AddRange([byte[]](New-Attribute 61 ([byte[]](0, 0, 0, 5))))   # NAS-Port-Type Virtual
+    if ($Gateway)
+    {
+        # Microsoft VSA 47 (MS-Network-Access-Server-Type) = 1, what RD Gateway sends
+        $attrs.AddRange([byte[]](New-Attribute 26 ([byte[]](0, 0, 1, 0x37, 47, 6, 0, 0, 0, 1))))
+    }
     $maOffset = 20 + $attrs.Count + 2
     $attrs.AddRange([byte[]](New-Attribute 80 (New-Object byte[] 16)))
 

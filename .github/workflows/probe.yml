@@ -1,0 +1,10 @@
+name: Probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe
+        shell: powershell
+        run: ./tests/Probe.ps1

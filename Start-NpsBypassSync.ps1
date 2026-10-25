@@ -1402,9 +1402,9 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="3*"/>
+                        <RowDefinition Height="5*"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="2*"/>
+                        <RowDefinition Height="4*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <StackPanel Margin="18,16,18,8">
@@ -1471,7 +1471,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                     <TextBlock Text="Activity" Foreground="{StaticResource Muted}" FontSize="12" FontWeight="SemiBold"/>
                     <TextBlock Name="TxtStatus" Foreground="{StaticResource Muted}" FontSize="12" HorizontalAlignment="Right"/>
                 </Grid>
-                <TextBox Name="TxtLog" IsReadOnly="True" Height="96" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" BorderThickness="0" Padding="0"/>
+                <TextBox Name="TxtLog" IsReadOnly="True" Height="72" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" BorderThickness="0" Padding="0"/>
             </StackPanel>
         </Border>
 

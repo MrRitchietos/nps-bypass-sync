@@ -259,10 +259,16 @@ function Get-Prop
 
 function Get-DomainInfo
 {
-    $rootDse = New-Object DirectoryServices.DirectoryEntry 'LDAP://RootDSE'
-    $domainDn = "$($rootDse.Properties['defaultNamingContext'].Value)"
-    $configDn = "$($rootDse.Properties['configurationNamingContext'].Value)"
-    if (-not $domainDn) { throw 'Active Directory is not reachable from this server.' }
+    $domainDn = ''
+    $configDn = ''
+    try
+    {
+        $rootDse = New-Object DirectoryServices.DirectoryEntry 'LDAP://RootDSE'
+        $domainDn = "$($rootDse.Properties['defaultNamingContext'].Value)"
+        $configDn = "$($rootDse.Properties['configurationNamingContext'].Value)"
+    }
+    catch { Write-Log "RootDSE: $($_.Exception.Message)" 'WARN' }
+    if (-not $domainDn -or -not $configDn) { throw 'Active Directory is not reachable from this server. Is it joined to the domain and can it reach a domain controller?' }
     $searcher = New-Searcher -Root "CN=Partitions,$configDn" -Filter "(&(objectClass=crossRef)(nCName=$(ConvertTo-LdapFilterValue $domainDn)))" -Properties 'nETBIOSName', 'dnsRoot'
     $r = $searcher.FindOne()
     $netbios = if ($r) { "$(Get-Prop $r 'nETBIOSName')" } else { '' }

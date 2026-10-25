@@ -1426,15 +1426,15 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                     <TextBlock Grid.Row="2" Text="Policies" Style="{StaticResource SectionTitle}" Margin="18,14,18,6"/>
                     <Grid Grid.Row="3" Margin="8,0,18,0">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.15*" MinWidth="330"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="1.1*"/>
                         </Grid.ColumnDefinitions>
                         <DataGrid Name="GridPolicies">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Policy" Binding="{Binding Name}" Width="*"/>
-                                <DataGridTemplateColumn Header="Change" CellTemplate="{StaticResource ActionCell}" Width="100"/>
-                                <DataGridTextColumn Header="Users" Binding="{Binding Users}" Width="60"/>
-                                <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="64"/>
+                                <DataGridTextColumn Header="Policy" Binding="{Binding Name}" Width="*" MinWidth="100"/>
+                                <DataGridTemplateColumn Header="Change" CellTemplate="{StaticResource ActionCell}" Width="96"/>
+                                <DataGridTextColumn Header="Users" Binding="{Binding Users}" Width="56"/>
+                                <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="62"/>
                             </DataGrid.Columns>
                         </DataGrid>
                         <StackPanel Grid.Column="1" Margin="10,4,0,0">
@@ -1758,10 +1758,10 @@ function Show-Overview
         foreach ($a in 'Create', 'Update', 'Delete')
         {
             $n = @($plan.Policies | Where-Object Action -eq $a).Count
-            if ($n) { $parts += "$($a.ToLower()) $n" }
+            if ($n) { $parts += "$n to $($a.ToLower())" }
         }
-        if ($plan.OrderChanged) { $parts += 'fix the order' }
-        $ui.TxtPlan.Text = "Sync now will $($parts -join ', ') polic$(if (@($plan.Policies | Where-Object Action -ne 'No change').Count -eq 1) { 'y' } else { 'ies' }). A backup is made first."
+        if (-not $parts.Count) { $parts += 'processing order to fix' }
+        $ui.TxtPlan.Text = "Policies: $($parts -join ', '). A backup is made first."
         $ui.BtnSync.IsEnabled = $true
     }
     else
@@ -1964,6 +1964,10 @@ function Save-WindowImage
     $source = [Windows.PresentationSource]::FromVisual($window)
     $scale = if ($source) { $source.CompositionTarget.TransformToDevice.M11 } else { 1 }
     $content = $window.Content
+    # Render at the normal window size, also on a small CI screen.
+    $content.Measure((New-Object Windows.Size 1220, 800))
+    $content.Arrange((New-Object Windows.Rect 0, 0, 1220, 800))
+    $content.UpdateLayout()
     $rtb = [Windows.Media.Imaging.RenderTargetBitmap]::new([int]($content.ActualWidth * $scale), [int]($content.ActualHeight * $scale), [double](96 * $scale), [double](96 * $scale), [Windows.Media.PixelFormats]::Pbgra32)
     $rtb.Render($content)
     $enc = New-Object Windows.Media.Imaging.PngBitmapEncoder

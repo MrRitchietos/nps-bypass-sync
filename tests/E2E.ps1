@@ -193,10 +193,25 @@ Assert (-not (Get-ScheduledTask -TaskName 'NPS Bypass Sync' -ErrorAction Silentl
 Assert (-not (Test-Path "$env:ProgramFiles\NPS Bypass Sync\NpsBypassSync.exe")) 'copy removed'
 
 Step 'Window'
-Write-Config @{ BypassGroups = @('MFA-Bypass'); RequireGroups = @('RDS-Users') }
-foreach ($u in $users[0..2]) { $u.Groups = @('RDS-Users') }
-$users += [ordered]@{ Sam = 'newbie'; Upn = 'new.bie@contoso.com'; DisplayName = 'New Person'; NetBios = $nb; Groups = @('MFA-Bypass', 'RDS-Users') }
-Write-Users $users
+# Example people for the screenshot: one sync, then two join, one leaves.
+$people = @(
+    @('Anna Peeters', 'apeeters', 'anna.peeters'), @('Bram Janssens', 'bjanssens', 'bram.janssens'), @('Claire Maes', 'cmaes', 'claire.maes'),
+    @('Dries Wouters', 'dwouters', 'dries.wouters'), @('Eva Claes', 'eclaes', 'eva.claes'), @('Femke Goossens', 'fgoossens', 'femke.goossens'),
+    @('Gert Willems', 'gwillems', 'gert.willems'), @('Hanne Dubois', 'hdubois', 'hanne.dubois'), @('Ilse Mertens', 'imertens', 'ilse.mertens'),
+    @('Jonas Lambert', 'jlambert', 'jonas.lambert'), @('Karen Dupont', 'kdupont', 'karen.dupont'), @('Lucas Hermans', 'lhermans', 'lucas.hermans'),
+    @('Marie Jacobs', 'mjacobs', 'marie.jacobs'), @('Nico Vermeulen', 'nvermeulen', 'nico.vermeulen'), @('Olivia Smets', 'osmets', 'olivia.smets'),
+    @('Pieter De Smet', 'pdesmet', 'pieter.desmet'), @('Sara Leroy', 'sleroy', 'sara.leroy'), @('Tom Martens', 'tmartens', 'tom.martens')
+) | ForEach-Object { [ordered]@{ Sam = $_[1]; Upn = "$($_[2])@contoso.com"; DisplayName = $_[0]; NetBios = 'CONTOSO'; Groups = @('MFA-Bypass', 'RDS-Users') } }
+$people[15].Groups = @('MFA-Bypass')
+$people[16].Disabled = $true
+$late = $people[13..14]
+$people[13].Groups = @(); $people[14].Groups = @()
+Write-Config @{}
+Write-Users $people
+Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync with example people'
+$people[13].Groups = @('MFA-Bypass', 'RDS-Users'); $people[14].Groups = @('MFA-Bypass', 'RDS-Users')
+$people[2].Groups = @('RDS-Users')
+Write-Users $people
 [void](Invoke-Tool '-Screenshot', (Join-Path $shots 'main'), '-TestUsersFile', $usersFile)
 Assert (Test-Path (Join-Path $shots 'main-ready.png')) 'screenshot saved'
 

@@ -1,0 +1,14 @@
+# Build output
+build/.work/
+dist/
+src/Launcher/bin/
+src/Launcher/obj/
+
+# Test output
+e2e/
+probe/
+
+# OS & IDE metadata
+Thumbs.db
+.vs/
+.vscode/

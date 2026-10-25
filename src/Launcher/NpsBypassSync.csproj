@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Single-file launcher: hosts Windows PowerShell 5.1 in-process and carries the app as an embedded zip.
+       Build with build/Build.ps1, which stages the payload and passes PayloadZip. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>NpsBypassSync</AssemblyName>
+    <RootNamespace>NpsBypassSync</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\branding\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>NPS Bypass Sync</Product>
+    <Company>Connectify</Company>
+    <Description>NPS Bypass Sync</Description>
+    <Copyright>MIT License</Copyright>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <PayloadZip Condition="'$(PayloadZip)' == ''">..\..\build\.work\payload.zip</PayloadZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerShell.5.1.ReferenceAssemblies" Version="1.0.0" PrivateAssets="all" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" />
+    <EmbeddedResource Include="..\..\assets\branding\connectify-icon.png" LogicalName="splash-logo.png" />
+  </ItemGroup>
+
+</Project>

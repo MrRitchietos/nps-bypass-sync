@@ -869,6 +869,7 @@ function Invoke-NpsSync
             if ($added.Count) { $msg += "`r`nAdded: $($added -join ', ')" }
             if ($removed.Count) { $msg += "`r`nRemoved: $($removed -join ', ')" }
             $msg += "`r`nBackup: $backup"
+            $msg += "`r`nNPS uses the new policies within about 30 seconds."
             Write-SyncEvent -Id 1001 -Type Information -Message $msg
             Write-Log ($msg -replace "`r`n", ' | ') 'OK'
         }
@@ -1814,7 +1815,7 @@ $ui.BtnSync.Add_Click({
         Start-Work -Title 'Syncing...' -Command 'Invoke-NpsSync' -Arguments @{ Config = $config } -OnDone {
             param ($result, $failure)
             if ($failure) { Show-Error $failure 'Sync failed'; Start-Overview; return }
-            $msg = if ($result.Changed) { "Done. $($result.Users) user(s) in $($result.Policies) policy(ies).`n`nBackup: $($result.Backup)" } else { "Nothing to change. $($result.Users) user(s) in $($result.Policies) policy(ies)." }
+            $msg = if ($result.Changed) { "Done. $($result.Users) user(s) in $($result.Policies) policy(ies). NPS uses them within about 30 seconds.`n`nBackup: $($result.Backup)" } else { "Nothing to change. $($result.Users) user(s) in $($result.Policies) policy(ies)." }
             [void][Windows.MessageBox]::Show($window, $msg, 'NPS Bypass Sync', 'OK', 'Information')
             Start-Overview
         }

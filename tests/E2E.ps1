@@ -53,6 +53,17 @@ function Test-Bypass ([string]$User)
     if ($null -eq $code) { throw "No RADIUS answer for $User" }
     return $code -eq 3
 }
+function Wait-Nps ([scriptblock]$Condition, [string]$What)
+{
+    # NPS loads a new configuration by itself, within about 30 seconds.
+    $start = Get-Date
+    while (-not (& $Condition))
+    {
+        if ((Get-Date) -gt $start.AddSeconds(120)) { throw "NPS did not pick up the change: $What" }
+        Start-Sleep -Seconds 3
+    }
+    Write-Host "  NPS picked up the change after $([int]((Get-Date) - $start).TotalSeconds) s"
+}
 function Write-Users ($Users) { $Users | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $usersFile -Encoding UTF8 }
 function Write-Config ($Values)
 {
@@ -109,6 +120,7 @@ $acl = (Get-Acl $data).Access | ForEach-Object { $_.IdentityReference.Translate(
 Assert ((($acl) -join ',') -eq 'S-1-5-18,S-1-5-32-544') "data folder only SYSTEM + Administrators ($($acl -join ','))"
 
 Step 'RADIUS: who skips MFA'
+Wait-Nps { Test-Bypass "$($nb)\user17" } 'user17 added'
 foreach ($n in "$($nb)\user1", "$($nb.ToLower())\USER17", 'user23', 'first.last40@contoso.com', 'FIRST.LAST2@CONTOSO.COM', "$($nb)\admin1") { Assert (Test-Bypass $n) "bypass: $n" }
 foreach ($n in "$($nb)\olduser", "$($nb)\olduser2", "$($nb)\user41", "$($nb)\user1x", 'xuser1', 'OTHER\user1', 'first.last1@contoso.comx', 'user1@contoso.com', "$($nb)\nords", "$($nb)\gone", "$($nb)\first.last1") { Assert (-not (Test-Bypass $n)) "MFA: $n" }
 
@@ -122,6 +134,7 @@ Write-Users $users
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
 $small = @((Get-Crps).Crps | Where-Object { $_.Name -match '^Bypass_\d+$' })
 Assert ($small.Count -eq 1 -and $small[0].Name -eq 'Bypass_2') 'shrunk to Bypass_2 only'
+Wait-Nps { -not (Test-Bypass "$($nb)\user1") } 'user1 removed'
 Assert (Test-Bypass "$($nb)\user36") 'bypass: user36'
 Assert (-not (Test-Bypass "$($nb)\user1")) 'MFA: removed user1'
 $state = Get-Content (Join-Path $data 'state.json') -Raw | ConvertFrom-Json
@@ -143,6 +156,7 @@ Write-Users $users
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
 $empty = @((Get-Crps).Crps | Where-Object { $_.Name -match '^Bypass_\d+$' })
 Assert ($empty.Count -eq 1 -and -not $empty[0].Enabled) 'one disabled placeholder policy'
+Wait-Nps { -not (Test-Bypass "$($nb)\user36") } 'user36 removed'
 Assert (-not (Test-Bypass "$($nb)\user36")) 'MFA: user36'
 Assert (Test-Bypass "$($nb)\admin1") 'bypass: admin1 (own policy)'
 
@@ -151,6 +165,7 @@ foreach ($u in $users) { $u.Groups = @('MFA-Bypass', 'RDS-Users') }
 Write-Users $users
 Write-Config @{ MatchSam = $false; MatchUpn = $false }
 Assert ((Invoke-Tool '-Sync', '-TestUsersFile', $usersFile) -eq 0) 'sync exit code 0'
+Wait-Nps { Test-Bypass "$($nb)\user9" } 'user9 added (DOMAIN\user only)'
 Assert (Test-Bypass "$($nb)\user9") 'bypass: DOMAIN\user9'
 Assert (-not (Test-Bypass 'user9')) 'MFA: user9 without domain'
 Assert (-not (Test-Bypass 'first.last9@contoso.com')) 'MFA: UPN when UPN is off'

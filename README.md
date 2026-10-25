@@ -31,6 +31,7 @@ A user can log on as `DOMAIN\user`, `user` or `user@domain.com`. All three are m
 
 - NPS is only written when something changed. Before that a backup of the full NPS configuration is saved.
 - After writing, the tool reads NPS back and compares. If it doesn't match, the backup goes back in.
+- NPS picks up the new policies by itself within about 30 seconds. The service is not restarted, so logins in progress are not disturbed.
 - Max users (default 100): when the groups suddenly hold more, nothing is changed. That catches someone nesting Domain Users in the bypass group.
 - Disabled and expired accounts are left out.
 - If AD can't be read, nothing is changed.
